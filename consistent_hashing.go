@@ -14,9 +14,10 @@ type Shard interface {
 
 type logicalShard struct {
 	children []Shard // shards that are children of this shard.
+	name string // *unique* name for this shard. Used as filename for journal.
 
-	Read() error // TODO arg(s) and returns
-	Mutate() error //TODO arg(s) and returns
+	//Read() error // TODO arg(s) and returns
+	//Mutate() error //TODO arg(s) and returns
 }
 
 type PhysicalShard interface {
@@ -42,15 +43,15 @@ type ConsistentHash struct {
 	// Only needs to be acquired for write if you are changing the topology in some way
   // (repartitioning, adding or removing a replica, etc)
 	// Thus, should be held by readers or no one almost always and add very little overhead.
-	mutex RWMutex
+	mutex sync.RWMutex
 }
 
-func (ConsistentHash *ch) AddForwardingTableEntry(e ForwardingTableEntry) error {
+func (ch *ConsistentHash) AddForwardingTableEntry(e ForwardingTableEntry) error {
 	ch.mutex.Lock()
 
 	// Find index for insertion
-	ind := Search(len(ch.forwardingTable), func(i int) bool {
-		return ch.forwardingTable[i].minHashVal >= e.minHahVal
+	ind := sort.Search(len(ch.forwardingTable), func(i int) bool {
+		return ch.forwardingTable[i].minHashVal >= e.minHashVal
 	})
 	
 	// Insert into slice at that point.
@@ -58,22 +59,25 @@ func (ConsistentHash *ch) AddForwardingTableEntry(e ForwardingTableEntry) error 
 		append([]ForwardingTableEntry{e}, ch.forwardingTable[ind:]...)...)
 
 	ch.mutex.Unlock()
+
+	return nil
 }
 
 // Returns the index of the child of ls to read from.
-func (logicalShard *ls) pickReadShard() error {
+func (ls *logicalShard) pickReadShard() int {
 	// Just pick a random one. Could plug in more complex strategy as desired.
-	return Intn(len(ls.children))
+	return rand.Intn(len(ls.children))
 }
 
-func (logicalShard *ls) Read() error {
-	ind := pickReadShard()
+func (ls *logicalShard) Read() error {
+	ind := ls.pickReadShard()
 	return ls.children[ind].Read()
 }
 
-func (logicalShard *ls) Mutate() error {
-	for shard := range ls.children {
+func (ls *logicalShard) Mutate() error {
+	for _, shard := range ls.children {
 		// TODO Check failure, buffer, etc.
 		shard.Mutate()
 	}
+	return nil
 }
