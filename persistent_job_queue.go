@@ -66,10 +66,27 @@ func (q *PersistentJobQueue) Get() Job {
 	return nil
 }
 
+func writeLen(f *os.File, length int) bool {
+	// TODO better length
+	lengthStr := string(length) + ";"
+	bytes, err := f.WriteString(lengthStr)
+	return err == nil && bytes == len(lengthStr)
+}
 
-func (q *PersistentJobQueue) Push(job Job) {
-	//bytes := job.Serialize()
-	//serializedLen := len(bytes)
+func writeBytes(f *os.File, bytes []byte) bool {
+	written, err := f.Write(bytes)
+	return err == nil && written == len(bytes)
+}
+
+
+func (q *PersistentJobQueue) Push(job Job) bool {
+	bytes := job.Serialize()
+	success := writeLen(q.writeFile, len(bytes))
+	if success {
+		success := writeBytes(q.writeFile, bytes)
+		return success
+	}
+	return success
 }
 
 func (q *PersistentJobQueue) Commit(job Job) {
