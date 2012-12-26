@@ -39,6 +39,7 @@ type PersistentJobQueue struct {
 
 type Job interface {
 	Id() uint64
+	SetId(uint64)
 	Serialize() []byte
 	Deserialize([]byte)
 }
@@ -107,6 +108,10 @@ func writeBytes(f *os.File, bytes []byte) bool {
 
 
 func (q *PersistentJobQueue) Push(job Job) bool {
+	// Give it the next id
+	job.SetId(q.head)
+	q.head++
+
 	bytes := job.Serialize()
 	success := writeLen(q.writeFile, uint32(len(bytes)))
 	if success {
@@ -116,6 +121,35 @@ func (q *PersistentJobQueue) Push(job Job) bool {
 	return success
 }
 
-func (q *PersistentJobQueue) Commit(job Job) {
+// Returns the index of job in window, or -1 if out of range
+func (q *PersistentJobQueue) windowIndex(job Job) int {
+	ind := int(job.Id() - q.tail)
+	if ind < 0 || ind > len(q.window) {
+		ind = -1
+	}
+	return ind
+}
 
+func firstFalseIndex(slice []bool) int {
+	for i, v := range slice {
+		if !v {
+			return i
+		}
+	}
+	return len(slice)
+}
+
+func (q *PersistentJobQueue) Commit(job Job) {
+	ind := q.windowIndex(job)
+	if ind < 0 {
+		// TODO log or return 0 or something
+		return
+	}
+	// Try to slide the window forward
+	newTail := firstFalseIndex(q.window)
+	if newTail > 0 {
+		// Slide window forward.
+		q.window = q.window[:newTail]
+		q.tail += uint64(newTail)
+	}
 }
