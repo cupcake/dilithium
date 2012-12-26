@@ -4,7 +4,10 @@ import (
 //	"bytes"
 	"log"
 	"os"
+	"encoding/binary"
 	)
+
+const recordLengthBytes = 4 // Use 32-bit numbers for writing the length in the journal.
 
 // Provides a persistent (journaled) job queue.
 // Its goal is that each job in the queue is seen by one reader once.
@@ -16,12 +19,15 @@ import (
 // long enough that many other Gets or Pushes have occurred in the meantime,
 // performance may suffer.
 
+// It is not threadsafe. The user must provide some form of synchronization on top.
+// The recommendation is to have one goroutine that owns it and has jobs passed in
+// and out via channels. See other files.
+
 type PersistentJobQueue struct {
 	filename string // Name of the file that backs the queue
 	head uint64 // id of the front of the front of the queue (last written)
 	tail uint64 // id of the back of the queue (next to read)
-	// TODO mmapped file
-	// TODO also store the window's element data outside the mmapped files? or ptrs to them?
+	// TODO also store the window's element data outside the file? or ptrs to them?
 	// window of outstanding elements. window[i] accounts for the element of id
 	// (i + tail). true means that it has been committed.
 	window []bool
@@ -34,7 +40,7 @@ type PersistentJobQueue struct {
 type Job interface {
 	Id() uint64
 	Serialize() []byte
-	Deserialize([]byte) Job
+	Deserialize([]byte)
 }
 
 func NewPersistentJobQueue(name string, recovery bool) *PersistentJobQueue {
@@ -63,14 +69,35 @@ func NewPersistentJobQueue(name string, recovery bool) *PersistentJobQueue {
 }
 
 func (q *PersistentJobQueue) Get() Job {
-	return nil
+	// read from file
+	lengthBuffer := make([]byte, recordLengthBytes)
+	bytesRead, err := q.readFile.Read(lengthBuffer)
+	if bytesRead < recordLengthBytes || err != nil {
+		// TODO pass back error?
+		return nil
+	}
+	recordLength := binary.BigEndian.Uint32(lengthBuffer)
+	jobBuffer := make([]byte, recordLength)
+	bytesRead, err = q.readFile.Read(jobBuffer)
+	if uint32(bytesRead) < recordLength || err != nil {
+		// TODO pass back error?
+		return nil
+	}
+
+	j := &job{}
+	j.Deserialize(jobBuffer)
+
+
+	// Extend window to track that this job has not been committed.
+	q.window = append(q.window, false)
+
+	return j
 }
 
-func writeLen(f *os.File, length int) bool {
-	// TODO better length
-	lengthStr := string(length) + ";"
-	bytes, err := f.WriteString(lengthStr)
-	return err == nil && bytes == len(lengthStr)
+func writeLen(f *os.File, length uint32) bool {
+	bytes := make([]byte, recordLengthBytes)
+	binary.BigEndian.PutUint32(bytes, length)
+	return writeBytes(f, bytes)
 }
 
 func writeBytes(f *os.File, bytes []byte) bool {
@@ -81,7 +108,7 @@ func writeBytes(f *os.File, bytes []byte) bool {
 
 func (q *PersistentJobQueue) Push(job Job) bool {
 	bytes := job.Serialize()
-	success := writeLen(q.writeFile, len(bytes))
+	success := writeLen(q.writeFile, uint32(len(bytes)))
 	if success {
 		success := writeBytes(q.writeFile, bytes)
 		return success
