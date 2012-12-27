@@ -24,20 +24,21 @@ type JobBundle struct {
 	resultChan chan bool
 }
 
-func NewJobQueue(qp JobQueuePersister) {
+func NewJobQueue(qp JobQueuePersister) *JobQueue {
 	queue := new(JobQueue)
 	queue.pushChan = make(chan JobBundle, 100)
 	queue.getChan = make(chan Job)
 	queue.doneChan = make(chan Job, 100)
 	queue.qp = qp
+	return queue
 }
 
-func (queue *JobQueue) Get() Job {
-	job := <- queue.getChan
-	return job
+func (queue *JobQueue) GetChan() chan Job {
+	return queue.getChan
 }
 
-func (queue *JobQueue) Push(bundle JobBundle) bool {
+func (queue *JobQueue) Push(job Job) bool {
+	bundle := JobBundle{job, make(chan bool, 1)}
 	queue.pushChan <- bundle
 	result := <- bundle.resultChan
 	return result
