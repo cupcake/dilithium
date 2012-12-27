@@ -23,11 +23,10 @@ const recordLengthBytes = 4 // Use 32-bit numbers for writing the length in the 
 // The recommendation is to have one goroutine that owns it and has jobs passed in
 // and out via channels. See other files.
 
-type PersistentJobQueue struct {
+type FileJobQueuePersister struct {
 	filename string // Name of the file that backs the queue
 	head uint64 // id of the front of the front of the queue (last written)
 	tail uint64 // id of the back of the queue (next to read)
-	// TODO also store the window's element data outside the file? or ptrs to them?
 	// window of outstanding elements. window[i] accounts for the element of id
 	// (i + tail). true means that it has been committed.
 	window []bool
@@ -44,8 +43,8 @@ type Job interface {
 	Deserialize([]byte)
 }
 
-func NewPersistentJobQueue(name string, recovery bool) *PersistentJobQueue {
-	q := new(PersistentJobQueue)
+func NewFileJobQueuePersister(name string, recovery bool) *FileJobQueuePersister {
+	q := new(FileJobQueuePersister)
 	if !recovery {
 		// TODO better erorr handling
 		os.Mkdir("journals/", 0777)
@@ -69,7 +68,7 @@ func NewPersistentJobQueue(name string, recovery bool) *PersistentJobQueue {
 	return nil
 }
 
-func (q *PersistentJobQueue) Get() Job {
+func (q *FileJobQueuePersister) Get() Job {
 	// read from file
 	lengthBuffer := make([]byte, recordLengthBytes)
 	bytesRead, err := q.readFile.Read(lengthBuffer)
@@ -107,7 +106,7 @@ func writeBytes(f *os.File, bytes []byte) bool {
 }
 
 
-func (q *PersistentJobQueue) Push(job Job) bool {
+func (q *FileJobQueuePersister) Push(job Job) bool {
 	// Give it the next id
 	job.SetId(q.head)
 	q.head++
@@ -122,7 +121,7 @@ func (q *PersistentJobQueue) Push(job Job) bool {
 }
 
 // Returns the index of job in window, or -1 if out of range
-func (q *PersistentJobQueue) windowIndex(job Job) int {
+func (q *FileJobQueuePersister) windowIndex(job Job) int {
 	ind := int(job.Id() - q.tail)
 	if ind < 0 || ind > len(q.window) {
 		ind = -1
@@ -139,7 +138,7 @@ func firstFalseIndex(slice []bool) int {
 	return len(slice)
 }
 
-func (q *PersistentJobQueue) Commit(job Job) {
+func (q *FileJobQueuePersister) Commit(job Job) {
 	ind := q.windowIndex(job)
 	if ind < 0 {
 		// TODO log or return 0 or something

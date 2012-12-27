@@ -47,7 +47,7 @@ func Equal(j1 *job, j2 *job) bool {
 
 
 func TestEverything(t *testing.T) {
-	q := NewPersistentJobQueue("foo", false)
+	q := NewFileJobQueuePersister("foo", false)
 	if q == nil {
 		t.Error("Failed to create queue")
 	}
