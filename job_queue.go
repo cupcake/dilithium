@@ -1,18 +1,22 @@
 package dilithium
 
+import (
+	"sync"
+	)
+
 
 type JobQueuePersister interface {
 	Get() Job
 	Push(job Job) bool
-	Commit(job Job)
+	Done(job Job)
 }
 
 
 type JobQueue struct {
 	qp JobQueuePersister
 	pushChan chan JobBundle
-	getChan, commitChan chan Job
-	running bool
+	getChan, doneChan chan Job
+	runSync sync.Once
 }
 
 type JobBundle struct {
@@ -24,7 +28,7 @@ func NewJobQueue(qp JobQueuePersister) {
 	queue := new(JobQueue)
 	queue.pushChan = make(chan JobBundle, 100)
 	queue.getChan = make(chan Job)
-	queue.commitChan = make(chan Job, 100)
+	queue.doneChan = make(chan Job, 100)
 	queue.qp = qp
 }
 
@@ -39,20 +43,15 @@ func (queue *JobQueue) Push(bundle JobBundle) bool {
 	return result
 }
 
-func (queue *JobQueue)	Commit(job Job) {
+func (queue *JobQueue)	Done(job Job) {
 	// can definitely be async
-	queue.commitChan <- job
+	queue.doneChan <- job
 }
 
 // Start running the goroutine that owns this queue
 func (queue *JobQueue) Start() {
-	if !queue.running {
-		queue.running = true
-		go queue.run()
-	} else {
-		// Don't start another!
-		// TODO log
-	}
+	// TODO seems like I should be able to pass queue.run without anon function.
+	go queue.runSync.Do(func(){ queue.run() })
 }
 
 func (queue *JobQueue) run() {
@@ -68,8 +67,8 @@ func (queue *JobQueue) run() {
 		if nextGet == nil {
 			// Don't try to send on the get channel because we have nothing to send
 			select {
-			case job := <- queue.commitChan:
-				queue.qp.Commit(job)
+			case job := <- queue.doneChan:
+				queue.qp.Done(job)
 			case bundle := <- queue.pushChan:
 				// Push to underlying queue storage
 				result := queue.qp.Push(bundle.job)
@@ -79,8 +78,8 @@ func (queue *JobQueue) run() {
 			}
 		} else {
 			select {
-			case job := <- queue.commitChan:
-				queue.qp.Commit(job)
+			case job := <- queue.doneChan:
+				queue.qp.Done(job)
 			case bundle := <- queue.pushChan:
 				// Push to underlying queue storage
 				result := queue.qp.Push(bundle.job)

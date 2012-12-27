@@ -1,7 +1,6 @@
 package dilithium
 
 import (
-//	"bytes"
 	"log"
 	"os"
 	"encoding/binary"
@@ -14,8 +13,8 @@ const recordLengthBytes = 4 // Use 32-bit numbers for writing the length in the 
 // Its guarantee (in the face of failures) is that each job in the queue
 // is seen by at least one reader at least once.
 
-// Readers must eventually call a matching Commit after calling Get so that
-// garbage can be collected. If jobs are held (in between Get and Commit)
+// Readers must eventually call a matching Done after calling Get so that
+// garbage can be collected. If jobs are held (in between Get and Done)
 // long enough that many other Gets or Pushes have occurred in the meantime,
 // performance may suffer.
 
@@ -28,7 +27,7 @@ type FileJobQueuePersister struct {
 	head uint64 // id of the front of the front of the queue (last written)
 	tail uint64 // id of the back of the queue (next to read)
 	// window of outstanding elements. window[i] accounts for the element of id
-	// (i + tail). true means that it has been committed.
+	// (i + tail). true means that it has been doneted.
 	window []bool
 	readFile *os.File // File handle that we use to read queued jobs
 	writeFile *os.File // File handle that we use to write new queued jobs
@@ -88,7 +87,7 @@ func (q *FileJobQueuePersister) Get() Job {
 	j.Deserialize(jobBuffer)
 
 
-	// Extend window to track that this job has not been committed.
+	// Extend window to track that this job has not been doneted.
 	q.window = append(q.window, false)
 
 	return j
@@ -138,7 +137,7 @@ func firstFalseIndex(slice []bool) int {
 	return len(slice)
 }
 
-func (q *FileJobQueuePersister) Commit(job Job) {
+func (q *FileJobQueuePersister) Done(job Job) {
 	ind := q.windowIndex(job)
 	if ind < 0 {
 		// TODO log or return 0 or something

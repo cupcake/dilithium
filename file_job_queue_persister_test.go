@@ -46,14 +46,14 @@ func Equal(j1 *job, j2 *job) bool {
 }
 
 
-func TestEverything(t *testing.T) {
-	q := NewFileJobQueuePersister("foo", false)
+func TestSimple(t *testing.T) {
+	q := NewFileJobQueuePersister("file_job_queue_persister_test", false)
 	if q == nil {
 		t.Error("Failed to create queue")
 	}
 
 	if emptyGet := q.Get(); emptyGet != nil {
-		t.Error("Get when empty did not return nil")
+		t.Error("Get when initially empty did not return nil")
 	}
 
 	j1 := &job{}
@@ -75,6 +75,9 @@ func TestEverything(t *testing.T) {
 	}
 
 	if emptyGet := q.Get(); emptyGet != nil {
-		t.Error("Get when empty did not return nil")
+		t.Error("Get after emptied did not return nil")
 	}
+
+	q.Done(get2)
+	q.Done(get1)
 }
