@@ -15,6 +15,8 @@ const journalFilenamePrefix = "journal-"
 // TODO this should be set through some config
 const journalDirpath = "journals/"
 
+const lastDoneFilename = "last_done"
+
 // Provides a persistent (journaled) job queue.
 // Its goal is that each job in the queue is seen by one reader once.
 // Its guarantee (in the face of failures) is that each job in the queue
@@ -37,8 +39,7 @@ type FileJobQueuePersister struct {
 	// (i + tail). true means that it has been doneted.
 	window []bool
 	journals []journalFile
-	readFile *os.File // File handle that we use to read queued jobs
-	writeFile *os.File // File handle that we use to write new queued jobs
+	writeJournal, readJournal int
 }
 
 type Job interface {
@@ -55,6 +56,9 @@ type journalFile struct {
 	basename string
 	// The id of the highest record contained. Used to know when we can delete.
 	lastRecord uint64
+	number int
+	readFile *os.File // File handle that we use to read queued jobs
+	writeFile *os.File // File handle that we use to write new queued jobs
 }
 
 func isJournal(name string) bool {
@@ -97,6 +101,16 @@ func (q *FileJobQueuePersister) latestRecord(journal journalFile) (uint64, error
 	return max, err
 }
 
+func (q *FileJobQueuePersister) readFile() *os.File {
+	return q.journals[q.readJournal].readFile
+}
+
+func (q *FileJobQueuePersister) writeFile() *os.File {
+	return q.journals[q.writeJournal].writeFile
+}
+
+
+
 func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 	q := new(FileJobQueuePersister)
 	q.name = name
@@ -112,9 +126,26 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 		if !fi.IsDir() {
 			if isJournal(fi.Name()) {
 				journals[journalNumber(fi.Name())] = journalFile{basename: fi.Name()}
+			} else if fi.Name() == lastDoneFilename {
+				// TODO read and set q.tail to the content
+				q.tail = 0
 			}
 		}
 	}
+	
+	nextJournalNum := 0
+	if len(journals) > 0 {
+		// TODO
+	}
+	i := 0 // number of existing open journals
+	q.journals = make([] journalFile, 1)
+	q.writeJournal = i
+	q.readJournal = i
+	q.journals[i].number = nextJournalNum
+	q.journals[i].basename = journalFilenamePrefix + strconv.Itoa(q.journals[i].number)
+	q.journals[i].writeFile, _ = os.Create(q.journalDir() + q.journals[i].basename)
+	q.journals[i].readFile, _ = os.Open(q.journalDir() + q.journals[i].basename)
+	
 		/*writeFile, err := os.Create(q.filename)
 		if err == nil {
 			// TODO
@@ -136,7 +167,7 @@ func (q *FileJobQueuePersister) nextInFile(readFrom *os.File) (*job, error) {
 
 	// read from file
 	lengthBuffer := make([]byte, recordLengthBytes)
-	bytesRead, err := q.readFile.Read(lengthBuffer)
+	bytesRead, err := q.readFile().Read(lengthBuffer)
 	if bytesRead < recordLengthBytes || err != nil {
 		if err == io.EOF {
 			// Don't pass back EOF
@@ -146,7 +177,7 @@ func (q *FileJobQueuePersister) nextInFile(readFrom *os.File) (*job, error) {
 	}
 	recordLength := binary.BigEndian.Uint32(lengthBuffer)
 	jobBuffer := make([]byte, recordLength)
-	bytesRead, err = q.readFile.Read(jobBuffer)
+	bytesRead, err = q.readFile().Read(jobBuffer)
 	if uint32(bytesRead) < recordLength || err != nil {
 		return nil, err
 	}
@@ -156,7 +187,7 @@ func (q *FileJobQueuePersister) nextInFile(readFrom *os.File) (*job, error) {
 }
 
 func (q *FileJobQueuePersister) Get() Job {
-	j, _ := q.nextInFile(q.readFile)
+	j, _ := q.nextInFile(q.readFile())
 	if j == nil {
 		return nil
 	}
@@ -185,9 +216,9 @@ func (q *FileJobQueuePersister) Push(job Job) bool {
 	q.head++
 
 	bytes := job.Serialize()
-	success := writeLen(q.writeFile, uint32(len(bytes)))
+	success := writeLen(q.writeFile(), uint32(len(bytes)))
 	if success {
-		success := writeBytes(q.writeFile, bytes)
+		success := writeBytes(q.writeFile(), bytes)
 		return success
 	}
 	return success
