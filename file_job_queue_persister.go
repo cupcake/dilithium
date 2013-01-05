@@ -36,6 +36,7 @@ type FileJobQueuePersister struct {
 	// window of outstanding elements. window[i] accounts for the element of id
 	// (i + tail). true means that it has been doneted.
 	window []bool
+	journals []journalFile
 	readFile *os.File // File handle that we use to read queued jobs
 	writeFile *os.File // File handle that we use to write new queued jobs
 }
@@ -47,8 +48,12 @@ type Job interface {
 	Deserialize([]byte)
 }
 
+// Represents one journal file that we are reading from and/or
+// writing to.
 type journalFile struct {
+	// Filename (not including directories) of the file
 	basename string
+	// The id of the highest record contained. Used to know when we can delete.
 	lastRecord uint64
 }
 
@@ -152,6 +157,9 @@ func (q *FileJobQueuePersister) nextInFile(readFrom *os.File) (*job, error) {
 
 func (q *FileJobQueuePersister) Get() Job {
 	j, _ := q.nextInFile(q.readFile)
+	if j == nil {
+		return nil
+	}
 
 	// Extend window to track that this job has not been done-ed.
 	q.window = append(q.window, false)
