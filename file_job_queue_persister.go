@@ -29,7 +29,7 @@ const lastDoneFilename = "last_done"
 
 // It is not threadsafe. The user must provide some form of synchronization on top.
 // The recommendation is to have one goroutine that owns it and has jobs passed in
-// and out via channels. JobQueue does this..
+// and out via channels. JobQueue does this.
 
 type FileJobQueuePersister struct {
 	name string // Name of the file that backs the queue
@@ -42,9 +42,12 @@ type FileJobQueuePersister struct {
 	writeJournal, readJournal int
 }
 
+// Represents one job that is stored in the queue
 type Job interface {
 	Id() uint64
 	SetId(uint64)
+	// Possible that these should be cut from the interface. See my
+	// other comments about the Job vs job issue.
 	Serialize() []byte
 	Deserialize([]byte)
 }
@@ -54,8 +57,10 @@ type Job interface {
 type journalFile struct {
 	// Filename (not including directories) of the file
 	basename string
-	// The id of the highest record contained. Used to know when we can delete.
-	lastRecord uint64
+	// The id of the highest record contained. We can delete it when all records up to and
+	// including this have been Done-ed
+	latestRecord uint64
+	// the number of this journal (used in filename, possibly for ordering multiple old journals)
 	number int
 	readFile *os.File // File handle that we use to read queued jobs
 	writeFile *os.File // File handle that we use to write new queued jobs
@@ -65,12 +70,15 @@ func isJournal(name string) bool {
 	return strings.HasPrefix(name, journalFilenamePrefix)
 }
 
+// Given the filename (without any path) of a journal, returns
+// the number of that journal.
 func journalNumber(basename string) int {
 	// TODO error handle
 	num, _ := strconv.Atoi(basename[len(journalFilenamePrefix):])
 	return num
 }
 
+// Returns the path to the directory where q stores its journals.
 func (q *FileJobQueuePersister) journalDir() string {
 	// TODO at some point should error check to make sure name doesn't have a /
 	return journalDirpath + q.name + "/"
@@ -84,6 +92,10 @@ func (q *FileJobQueuePersister) latestRecord(journal journalFile) (uint64, error
 	// either make that not an abstract interface and say that your job will simply
 	// have an id and a slice of bytes (probably best) or have some way to communicate
 	// the exact type to the constructor.
+	// I think the answer is that the FileJobQueuePersister should always use job, but
+	// the JobQueue should only work with Jobs. There's no need for this persister to
+  // plug in a different kind of job, but the job queue should be able to store any
+	// kind of job.
 	max := uint64(0)
 	file, err := os.Open(q.journalDir() + journal.basename)
 	for err != nil {
@@ -120,12 +132,20 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 	os.Mkdir(dirname, 0777)
 	dirFile, _ := os.Open(dirname)
 	fis, _ := dirFile.Readdir(0)
-	journals := make(map[int]journalFile)
+	q.journals = make([]journalFile, 0)
+	maxJournalNumber := 0 // highest journal number of any journal found.
 	for _, fi := range fis {
 		// skip any subdirectories (there shouldn't be any)
 		if !fi.IsDir() {
 			if isJournal(fi.Name()) {
-				journals[journalNumber(fi.Name())] = journalFile{basename: fi.Name()}
+				num := journalNumber(fi.Name())
+				q.journals = append(q.journals, journalFile{basename: fi.Name(),
+				number: num})
+				if num > maxJournalNumber {
+					maxJournalNumber = num
+				}
+				curr := &q.journals[len(q.journals)-1]
+				curr.latestRecord, _ = q.latestRecord(*curr)
 			} else if fi.Name() == lastDoneFilename {
 				// TODO read and set q.tail to the content
 				q.tail = 0
@@ -133,32 +153,19 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 		}
 	}
 	
-	nextJournalNum := 0
-	if len(journals) > 0 {
+	nextJournalNum := maxJournalNumber + 1
+	if len(q.journals) > 0 {
 		// TODO
 	}
-	i := 0 // number of existing open journals
-	q.journals = make([] journalFile, 1)
+	// Add a new journal; this is what we will begin writing to.
+	q.journals = append(q.journals, journalFile{})
+	i := len(q.journals) - 1 // index of journal we added
 	q.writeJournal = i
-	q.readJournal = i
+	q.readJournal = i // TODO--this will probably be a previous journal if they're around.
 	q.journals[i].number = nextJournalNum
 	q.journals[i].basename = journalFilenamePrefix + strconv.Itoa(q.journals[i].number)
 	q.journals[i].writeFile, _ = os.Create(q.journalDir() + q.journals[i].basename)
 	q.journals[i].readFile, _ = os.Open(q.journalDir() + q.journals[i].basename)
-	
-		/*writeFile, err := os.Create(q.filename)
-		if err == nil {
-			// TODO
-			readFile, _ := os.Open(q.filename)
-			q.writeFile = writeFile
-			q.readFile = readFile
-		 }
-		if err != nil {
-			log.Println("Failure opening journal:", err)
-			return nil
-		} else {
-			return q
-		}*/
 	return q
 }
 
