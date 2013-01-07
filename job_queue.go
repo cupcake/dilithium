@@ -2,8 +2,7 @@ package dilithium
 
 import (
 	"sync"
-	)
-
+)
 
 // JobQueue is what dilithium clients will interact with.
 // It allows calls to Push, Done, and Get, and also exposes a channel
@@ -11,12 +10,11 @@ import (
 // Push and Done should also mostly be nonblocking because they are
 // bufferend channels.
 type JobQueue struct {
-	qp JobQueuePersister
-	pushChan chan jobBundle
+	qp                JobQueuePersister
+	pushChan          chan jobBundle
 	getChan, doneChan chan Job
-	runSync sync.Once
+	runSync           sync.Once
 }
-
 
 // This is the lowest level of the job queue.
 // It provides the desired level of persistence and the queueing logic that returns
@@ -44,7 +42,7 @@ type JobQueuePersister interface {
 // Encapsulates both a job and a resultChan to return the result of the
 // underlying call to the persister's Push method.
 type jobBundle struct {
-	job Job
+	job        Job
 	resultChan chan bool
 }
 
@@ -60,7 +58,7 @@ func NewJobQueue(qp JobQueuePersister) *JobQueue {
 
 // Do a blocking Get on queue.
 func (queue *JobQueue) Get() Job {
-	return <- queue.GetChan()
+	return <-queue.GetChan()
 }
 
 // Return a channel to wait on to get jobs from queue.
@@ -81,13 +79,13 @@ func (queue *JobQueue) GetChan() chan Job {
 func (queue *JobQueue) Push(job Job) bool {
 	bundle := jobBundle{job, make(chan bool, 1)}
 	queue.pushChan <- bundle
-	result := <- bundle.resultChan
+	result := <-bundle.resultChan
 	return result
 }
 
 // Tells the queue that job has been completed and does not need
 // to be persisted, nor replayed after failure.
-func (queue *JobQueue)	Done(job Job) {
+func (queue *JobQueue) Done(job Job) {
 	// can definitely be async
 	queue.doneChan <- job
 }
@@ -95,7 +93,7 @@ func (queue *JobQueue)	Done(job Job) {
 // Start running the goroutine that owns this queue
 func (queue *JobQueue) Start() {
 	// TODO seems like I should be able to pass queue.run without anon function.
-	go queue.runSync.Do(func(){ queue.run() })
+	go queue.runSync.Do(func() { queue.run() })
 }
 
 // The logic that the JobQueue performs to pass data between clients and the persister
@@ -115,9 +113,9 @@ func (queue *JobQueue) run() {
 		if nextGet == nil {
 			// Don't try to send on the get channel because we have nothing to send
 			select {
-			case job := <- queue.doneChan:
+			case job := <-queue.doneChan:
 				queue.qp.Done(job)
-			case bundle := <- queue.pushChan:
+			case bundle := <-queue.pushChan:
 				// Push to underlying queue storage
 				result := queue.qp.Push(bundle.job)
 				// pass the result back to the caller (and let them know it's done)
@@ -126,9 +124,9 @@ func (queue *JobQueue) run() {
 			}
 		} else {
 			select {
-			case job := <- queue.doneChan:
+			case job := <-queue.doneChan:
 				queue.qp.Done(job)
-			case bundle := <- queue.pushChan:
+			case bundle := <-queue.pushChan:
 				// Push to underlying queue storage
 				result := queue.qp.Push(bundle.job)
 				// pass the result back to the caller (and let them know it's done)

@@ -7,7 +7,7 @@ import (
 const jobIdBytes = 8
 
 type job struct {
-	id uint64
+	id   uint64
 	args []byte
 }
 
@@ -25,7 +25,7 @@ func (j *job) Serialize() []byte {
 	return append(idBytes, j.args...)
 }
 
-func (j *job) Deserialize(serialized [] byte) {
+func (j *job) Deserialize(serialized []byte) {
 	j.id = binary.BigEndian.Uint64(serialized[:jobIdBytes])
 	j.args = serialized[jobIdBytes:]
 }
@@ -43,4 +43,3 @@ func equal(j1 *job, j2 *job) bool {
 	}
 	return true
 }
-

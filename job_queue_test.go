@@ -2,7 +2,7 @@ package dilithium
 
 import (
 	"testing"
-	)
+)
 
 func TestSinglethreaded(t *testing.T) {
 	qp := NewFileJobQueuePersister("job_queue_test")
@@ -15,7 +15,7 @@ func TestSinglethreaded(t *testing.T) {
 	q.Start()
 
 	select {
-	case <- q.GetChan():
+	case <-q.GetChan():
 		t.Error("Get when initially empty returned something on the channel")
 	default:
 		// It should follow this branch because nothing will ever be written
@@ -30,18 +30,17 @@ func TestSinglethreaded(t *testing.T) {
 	j2 := &job{0, j2Serialized}
 	q.Push(j2)
 
-
-	get1 := (<- q.GetChan()).(*job)
+	get1 := (<-q.GetChan()).(*job)
 	if !equal(j1, get1) {
 		t.Error(get1)
 	}
-	get2 := (<- q.GetChan()).(*job)
+	get2 := (<-q.GetChan()).(*job)
 	if !equal(j2, get2) {
 		t.Error(get2)
 	}
 
 	select {
-	case <- q.GetChan():
+	case <-q.GetChan():
 		t.Error("Get after being emptied returned something on the channel")
 	default:
 		// It should follow this branch because nothing will ever be written

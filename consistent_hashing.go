@@ -1,36 +1,36 @@
 package dilithium
 
 import (
+	"math/rand"
 	"sort"
 	"sync"
-	"math/rand"
-	)
+)
 
 // This is a start but hasn't been touched since I started the stuff that goes under it.
 // Also was totally punting on how to do the interface when I did this.
 // Also, should be renamed.
 
 type Shard interface {
-	Read() error // TODO arg(s) and returns
+	Read() error   // TODO arg(s) and returns
 	Mutate() error //TODO arg(s) and returns
 	// TODO more?
 }
 
 type logicalShard struct {
 	children []Shard // shards that are children of this shard.
-	name string // *unique* name for this shard. Used as filename for journal.
+	name     string  // *unique* name for this shard. Used as filename for journal.
 
 	//Read() error // TODO arg(s) and returns
 	//Mutate() error //TODO arg(s) and returns
 }
 
 type PhysicalShard interface {
-	Read() error // TODO arg(s) and returns
+	Read() error   // TODO arg(s) and returns
 	Mutate() error //TODO arg(s) and returns
 }
 
 type ForwardingTableEntry struct {
- 	// The minimum hash value that matches this range.
+	// The minimum hash value that matches this range.
 	minHashVal int64
 	// What shard this maps to. TODO should probably be a pointer to a tree node or something.
 	shard Shard
@@ -42,10 +42,9 @@ type ConsistentHash struct {
 	// the last entry.
 	forwardingTable []ForwardingTableEntry
 
-
 	// Synchronizes access to the structure.
 	// Only needs to be acquired for write if you are changing the topology in some way
-  // (repartitioning, adding or removing a replica, etc)
+	// (repartitioning, adding or removing a replica, etc)
 	// Thus, should be held by readers or no one almost always and add very little overhead.
 	mutex sync.RWMutex
 }
@@ -57,7 +56,7 @@ func (ch *ConsistentHash) AddForwardingTableEntry(e ForwardingTableEntry) error 
 	ind := sort.Search(len(ch.forwardingTable), func(i int) bool {
 		return ch.forwardingTable[i].minHashVal >= e.minHashVal
 	})
-	
+
 	// Insert into slice at that point.
 	ch.forwardingTable = append(ch.forwardingTable[:ind],
 		append([]ForwardingTableEntry{e}, ch.forwardingTable[ind:]...)...)

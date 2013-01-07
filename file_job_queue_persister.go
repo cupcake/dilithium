@@ -1,17 +1,18 @@
 package dilithium
 
 import (
-	"log"
-	"io"
-	"os"
 	"encoding/binary"
-	"strings"
+	"io"
+	"log"
+	"os"
 	"strconv"
-	)
+	"strings"
+)
 
 const recordLengthBytes = 4 // Use 32-bit numbers for writing the length in the journal.
 // journal files are named journal-X where X is an integer
 const journalFilenamePrefix = "journal-"
+
 // TODO this should be set through some config
 const journalDirpath = "journals/"
 
@@ -48,8 +49,8 @@ type FileJobQueuePersister struct {
 	tail uint64 // id of the back of the queue (lowest id that has not been Done-ed)
 	// window of outstanding elements. window[i] accounts for the element of id
 	// (i + tail). true means that it has been doneted.
-	window []bool
-	journals []journalFile
+	window                    []bool
+	journals                  []journalFile
 	writeJournal, readJournal int
 }
 
@@ -72,8 +73,8 @@ type journalFile struct {
 	// including this have been Done-ed
 	latestRecord uint64
 	// the number of this journal (used in filename, possibly for ordering multiple old journals)
-	number int
-	readFile *os.File // File handle that we use to read queued jobs
+	number    int
+	readFile  *os.File // File handle that we use to read queued jobs
 	writeFile *os.File // File handle that we use to write new queued jobs
 }
 
@@ -105,7 +106,7 @@ func (q *FileJobQueuePersister) latestRecord(journal journalFile) (uint64, error
 	// the exact type to the constructor.
 	// I think the answer is that the FileJobQueuePersister should always use job, but
 	// the JobQueue should only work with Jobs. There's no need for this persister to
-  // plug in a different kind of job, but the job queue should be able to store any
+	// plug in a different kind of job, but the job queue should be able to store any
 	// kind of job.
 	max := uint64(0)
 	file, err := os.Open(q.journalDir() + journal.basename)
@@ -132,8 +133,6 @@ func (q *FileJobQueuePersister) writeFile() *os.File {
 	return q.journals[q.writeJournal].writeFile
 }
 
-
-
 func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 	q := new(FileJobQueuePersister)
 	q.name = name
@@ -152,7 +151,7 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 		if !fi.IsDir() {
 			if isJournal(fi.Name()) {
 				q.journals = append(q.journals, journalFile{basename: fi.Name(),
-				number: journalNumber(fi.Name())})
+					number: journalNumber(fi.Name())})
 				curr := &q.journals[len(q.journals)-1]
 				if curr.number > maxJournalNumber {
 					maxJournalNumber = curr.number
@@ -164,7 +163,7 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 			}
 		}
 	}
-	
+
 	nextJournalNum := maxJournalNumber + 1 // start a new journal
 	if len(q.journals) > 0 {
 		// TODO make sure journals are sorted by latestRecord (should be same as sorting by number)
@@ -249,7 +248,6 @@ func writeBytes(f *os.File, bytes []byte) bool {
 	written, err := f.Write(bytes)
 	return err == nil && written == len(bytes)
 }
-
 
 func (q *FileJobQueuePersister) Push(job Job) bool {
 	// Give it the next id
