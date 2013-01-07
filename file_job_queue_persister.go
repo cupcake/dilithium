@@ -17,6 +17,17 @@ const journalDirpath = "journals/"
 
 const lastDoneFilename = "last_done"
 
+// TODO's (roughly prioritized)
+// 1. Make recovery actually work. This means serializing
+// deserializing the latest done job id; starting our reading at
+// the corresponding point in a journal; having something fsync
+// periodically.
+// 2. Prune old logs. I have some TODO's saying to do this at startup,
+// but in case it's long-running, we should also periodically just
+// look at all the journals we have open and delete & close any who
+// end after tail.
+// 3. Error handling!!!!!
+
 // Provides a persistent (journaled) job queue.
 // Its goal is that each job in the queue is seen by one reader once.
 // Its guarantee (in the face of failures) is that each job in the queue
@@ -134,17 +145,18 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 	fis, _ := dirFile.Readdir(0)
 	q.journals = make([]journalFile, 0)
 	maxJournalNumber := 0 // highest journal number of any journal found.
+	// Look at all files for old journals and for a file indicating what jobs we
+	// know were Doned
 	for _, fi := range fis {
 		// skip any subdirectories (there shouldn't be any)
 		if !fi.IsDir() {
 			if isJournal(fi.Name()) {
-				num := journalNumber(fi.Name())
 				q.journals = append(q.journals, journalFile{basename: fi.Name(),
-				number: num})
-				if num > maxJournalNumber {
-					maxJournalNumber = num
-				}
+				number: journalNumber(fi.Name())})
 				curr := &q.journals[len(q.journals)-1]
+				if curr.number > maxJournalNumber {
+					maxJournalNumber = curr.number
+				}
 				curr.latestRecord, _ = q.latestRecord(*curr)
 			} else if fi.Name() == lastDoneFilename {
 				// TODO read and set q.tail to the content
@@ -153,26 +165,41 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 		}
 	}
 	
-	nextJournalNum := maxJournalNumber + 1
+	nextJournalNum := maxJournalNumber + 1 // start a new journal
 	if len(q.journals) > 0 {
-		// TODO
+		// TODO make sure journals are sorted by latestRecord (should be same as sorting by number)
+		// TODO set q.head to be the largest latestRecord (the next ID we will assign is q.head + 1,
+		// and it should be one larger than the latest ID already given out.
+		// TODO we may also find that we can delete some journals right now because
+		// their latestRecord < tail
 	}
 	// Add a new journal; this is what we will begin writing to.
+	// (We could append to the last journal there is one and it has space, but
+	// this is simpler)
 	q.journals = append(q.journals, journalFile{})
 	i := len(q.journals) - 1 // index of journal we added
 	q.writeJournal = i
-	q.readJournal = i // TODO--this will probably be a previous journal if they're around.
+	// TODO If we prune all journals that we're fully done with and properly move reading
+	// from one journal to another, readJournal should always start at 0. For now,
+	// settting it to i makes us ignore the old journals.
+	q.readJournal = i
 	q.journals[i].number = nextJournalNum
 	q.journals[i].basename = journalFilenamePrefix + strconv.Itoa(q.journals[i].number)
 	q.journals[i].writeFile, _ = os.Create(q.journalDir() + q.journals[i].basename)
+	// TODO if we are reading an old journal, we need to advance past the start
+	// to the first job after q.tail
 	q.journals[i].readFile, _ = os.Open(q.journalDir() + q.journals[i].basename)
 	return q
 }
 
+// Returns the next job in readFrom, and any error that occrus when we read.
+// It will not return an EOF error. If we have simply reached the end of the file,
+// it returns (nil, nil). Actual errors will instead by (nil, someNonNilError)
 func (q *FileJobQueuePersister) nextInFile(readFrom *os.File) (*job, error) {
 	j := &job{}
 
-	// read from file
+	// Read from file
+	// Try to read the serialized length of the payload
 	lengthBuffer := make([]byte, recordLengthBytes)
 	bytesRead, err := q.readFile().Read(lengthBuffer)
 	if bytesRead < recordLengthBytes || err != nil {
@@ -182,6 +209,7 @@ func (q *FileJobQueuePersister) nextInFile(readFrom *os.File) (*job, error) {
 		}
 		return nil, err
 	}
+	// try to read the payload
 	recordLength := binary.BigEndian.Uint32(lengthBuffer)
 	jobBuffer := make([]byte, recordLength)
 	bytesRead, err = q.readFile().Read(jobBuffer)
@@ -205,12 +233,18 @@ func (q *FileJobQueuePersister) Get() Job {
 	return j
 }
 
+// Write the length of a serialized job to f
+// Return true on success, else false.
+// TODO we should probably actually be returning errors and eliminate this function
 func writeLen(f *os.File, length uint32) bool {
 	bytes := make([]byte, recordLengthBytes)
 	binary.BigEndian.PutUint32(bytes, length)
 	return writeBytes(f, bytes)
 }
 
+// Write bytes to f,
+// Return true on success, else false.
+// TODO we should probably actually be returning errors and eliminate this function
 func writeBytes(f *os.File, bytes []byte) bool {
 	written, err := f.Write(bytes)
 	return err == nil && written == len(bytes)
@@ -250,7 +284,7 @@ func firstFalseIndex(slice []bool) int {
 }
 
 func (q *FileJobQueuePersister) updateDurablyWritten() {
-	// TODO write q.tail to some file.
+	// TODO write q.tail to q.journalDirpath() + lastDoneFilename
 }
 
 func (q *FileJobQueuePersister) Done(job Job) {
