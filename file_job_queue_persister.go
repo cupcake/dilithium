@@ -66,8 +66,8 @@ type journalFile struct {
 	writeFile *os.File // File handle that we use to write new queued jobs
 }
 
-func isJournal(name string) bool {
-	return strings.HasPrefix(name, journalFilenamePrefix)
+func isJournal(basename string) bool {
+	return strings.HasPrefix(basename, journalFilenamePrefix)
 }
 
 // Given the filename (without any path) of a journal, returns

@@ -6,6 +6,10 @@ import (
 	"math/rand"
 	)
 
+// This is a start but hasn't been touched since I started the stuff that goes under it.
+// Also was totally punting on how to do the interface when I did this.
+// Also, should be renamed.
+
 type Shard interface {
 	Read() error // TODO arg(s) and returns
 	Mutate() error //TODO arg(s) and returns
