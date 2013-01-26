@@ -13,7 +13,6 @@ type Query struct {
 	ServiceMethod string
 	Arg           interface{}
 	Reply         interface{}
-	Error         error
 	server        *rpcServer
 	service       *service
 	method        *methodType
@@ -29,11 +28,10 @@ func (q *Query) Route() error {
 	if shard == nil {
 		return fmt.Errorf("dilithium: could not find shard for key: %d", key)
 	}
-	shard.Query(q)
-	return nil
+	return shard.Query(q)
 }
 
-func (q *Query) Run(conn interface{}) {
+func (q *Query) Run(conn interface{}) error {
 	f := q.method.method.Func
 
 	arg := reflect.ValueOf(q.Arg)
@@ -53,5 +51,5 @@ func (q *Query) Run(conn interface{}) {
 	} else {
 		res = f.Call([]reflect.Value{q.service.rcvr, reflect.ValueOf(conn), arg})
 	}
-	q.Error = res[0].Interface().(error)
+	return res[0].Interface().(error)
 }

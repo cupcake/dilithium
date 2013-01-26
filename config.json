@@ -1,0 +1,20 @@
+{
+  "5": {
+    "type": "Replicate",
+    "config": {},
+    "children": [
+      {
+        "type": "Physical",
+        "config": {
+          "url": "redis://localhost:6379"
+        }
+      },
+      {
+        "type": "Physical",
+        "config": {
+          "url": "redis://localhost:6380"
+        }
+      }
+    ]
+  }
+}

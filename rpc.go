@@ -7,6 +7,7 @@ package dilithium
 import (
 	"errors"
 	"log"
+	"net/rpc"
 	"reflect"
 	"strings"
 	"sync"
@@ -43,10 +44,13 @@ type rpcServer Server
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 var typeOfQueryArg = reflect.TypeOf((*QueryArg)(nil)).Elem()
 
-var DefaultServer = NewServer()
+var DefaultServer = NewServer(nil)
 
-func NewServer() *Server {
-	return &Server{forwarding: &ForwardingTable{}, services: make(map[string]*service)}
+func NewServer(forwarding *ForwardingTable) *Server {
+	if forwarding == nil {
+		forwarding = &ForwardingTable{}
+	}
+	return &Server{forwarding: forwarding, services: make(map[string]*service)}
 }
 
 func isExported(name string) bool {
@@ -157,6 +161,11 @@ func (s *Server) Register(rcvr interface{}) error {
 	return nil
 }
 
+func (s *Server) RegisterWithRPC(r *rpc.Server) {
+	server := rpcServer(*s)
+	r.RegisterName("dilithium", &server)
+}
+
 func (s *rpcServer) Query(q *Query, reply *interface{}) error {
 	q.server = s
 	serviceMethod := strings.Split(q.ServiceMethod, ".")
@@ -178,7 +187,6 @@ func (s *rpcServer) Query(q *Query, reply *interface{}) error {
 	if err != nil {
 		return err
 	}
-
 	*reply = q.Reply
-	return q.Error
+	return nil
 }

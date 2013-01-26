@@ -148,19 +148,20 @@ func NewFileJobQueuePersister(name string) *FileJobQueuePersister {
 	// know were Doned
 	for _, fi := range fis {
 		// skip any subdirectories (there shouldn't be any)
-		if !fi.IsDir() {
-			if isJournal(fi.Name()) {
-				q.journals = append(q.journals, journalFile{basename: fi.Name(),
-					number: journalNumber(fi.Name())})
-				curr := &q.journals[len(q.journals)-1]
-				if curr.number > maxJournalNumber {
-					maxJournalNumber = curr.number
-				}
-				curr.latestRecord, _ = q.latestRecord(*curr)
-			} else if fi.Name() == lastDoneFilename {
-				// TODO read and set q.tail to the content
-				q.tail = 0
+		if fi.IsDir() {
+			continue
+		}
+		if isJournal(fi.Name()) {
+			q.journals = append(q.journals, journalFile{basename: fi.Name(),
+				number: journalNumber(fi.Name())})
+			curr := &q.journals[len(q.journals)-1]
+			if curr.number > maxJournalNumber {
+				maxJournalNumber = curr.number
 			}
+			curr.latestRecord, _ = q.latestRecord(*curr)
+		} else if fi.Name() == lastDoneFilename {
+			// TODO read and set q.tail to the content
+			q.tail = 0
 		}
 	}
 
