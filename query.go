@@ -48,8 +48,8 @@ func (q *Query) Run(conn interface{}) error {
 	var res []reflect.Value
 	if q.ReadOnly() {
 		reply := reflect.New(q.method.ReplyType)
+		q.Reply = reply.Interface()
 		res = f.Call([]reflect.Value{q.service.rcvr, reflect.ValueOf(conn), arg, reply})
-		q.Reply = reply.Elem().Interface()
 	} else {
 		res = f.Call([]reflect.Value{q.service.rcvr, reflect.ValueOf(conn), arg})
 	}
