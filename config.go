@@ -38,7 +38,7 @@ func NewForwardingTable(config map[string]ShardConfig) (*ForwardingTable, error)
 		if err != nil {
 			return nil, err
 		}
-		table.Put(&ForwardingTableEntry{maxKey, shard})
+		table.Insert(&ForwardingTableEntry{maxKey, shard})
 	}
 	return table, nil
 }

@@ -98,7 +98,7 @@ func (s *Server) Register(rcvr interface{}) error {
 		// Method needs three or four ins.
 		// ReadOnly: receiver, *conn, *arg, *reply
 		// Write: receiver, *conn, *arg
-		if mtype.NumIn() != 3 || mtype.NumIn() != 4 {
+		if mtype.NumIn() != 3 && mtype.NumIn() != 4 {
 			log.Println("method", mname, "has wrong number of ins:", mtype.NumIn())
 			continue
 		}
@@ -149,7 +149,7 @@ func (s *Server) Register(rcvr interface{}) error {
 			log.Println("method", mname, "returns", returnType.String(), "not error")
 			continue
 		}
-		service.methods[mname] = &methodType{method: method, ArgType: argType, ReplyType: replyType, readOnly: readOnly}
+		service.methods[mname] = &methodType{method: method, ArgType: argType, ReplyType: replyType.Elem(), readOnly: readOnly}
 	}
 
 	if len(service.methods) == 0 {
@@ -168,9 +168,9 @@ func (s *Server) RegisterWithRPC(r *rpc.Server) {
 
 func (s *rpcServer) Query(q *Query, reply *interface{}) error {
 	q.server = s
-	serviceMethod := strings.Split(q.ServiceMethod, ".")
+	serviceMethod := strings.Split(q.Method, ".")
 	if len(serviceMethod) != 2 {
-		return errors.New("dilithium: query service/method invalid: " + q.ServiceMethod)
+		return errors.New("dilithium: query service/method invalid: " + q.Method)
 	}
 	s.mu.RLock()
 	q.service = s.services[serviceMethod[0]]
@@ -180,7 +180,7 @@ func (s *rpcServer) Query(q *Query, reply *interface{}) error {
 	}
 	q.method = q.service.methods[serviceMethod[1]]
 	if q.method == nil {
-		return errors.New("dilithium: can't find method " + q.ServiceMethod)
+		return errors.New("dilithium: can't find method " + q.Method)
 	}
 
 	err := q.Route()

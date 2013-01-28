@@ -10,12 +10,12 @@ type QueryArg interface {
 }
 
 type Query struct {
-	ServiceMethod string
-	Arg           interface{}
-	Reply         interface{}
-	server        *rpcServer
-	service       *service
-	method        *methodType
+	Method  string
+	Arg     QueryArg
+	Reply   interface{}
+	server  *rpcServer
+	service *service
+	method  *methodType
 }
 
 func (q *Query) ReadOnly() bool {
@@ -23,7 +23,7 @@ func (q *Query) ReadOnly() bool {
 }
 
 func (q *Query) Route() error {
-	key := q.Arg.(QueryArg).ShardKey()
+	key := q.Arg.ShardKey()
 	shard := q.server.forwarding.Lookup(key)
 	if shard == nil {
 		return fmt.Errorf("dilithium: could not find shard for key: %d", key)
@@ -47,9 +47,15 @@ func (q *Query) Run(conn interface{}) error {
 
 	var res []reflect.Value
 	if q.ReadOnly() {
-		res = f.Call([]reflect.Value{q.service.rcvr, reflect.ValueOf(conn), arg, reflect.ValueOf(&q.Reply)})
+		reply := reflect.New(q.method.ReplyType)
+		res = f.Call([]reflect.Value{q.service.rcvr, reflect.ValueOf(conn), arg, reply})
+		q.Reply = reply.Elem().Interface()
 	} else {
 		res = f.Call([]reflect.Value{q.service.rcvr, reflect.ValueOf(conn), arg})
 	}
-	return res[0].Interface().(error)
+	resErr := res[0].Interface()
+	if resErr != nil {
+		return resErr.(error)
+	}
+	return nil
 }

@@ -222,11 +222,14 @@ func (p *PhysicalShard) ID() string {
 
 func (p *PhysicalShard) Query(q *Query) error {
 	p.RLock()
-	conn := p.pool.Get()
-	err := q.Run(conn)
-	conn.Close()
-	p.RUnlock()
-	return err
+	defer p.RUnlock()
+	// TODO: error handling
+	conn, err := p.pool.Get()
+	defer conn.Close()
+	if err != nil {
+		return err
+	}
+	return q.Run(conn.c)
 }
 
 func init() {

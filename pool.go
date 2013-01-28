@@ -75,8 +75,10 @@ func NewPool(newFn func(string) (Closer, error), maxIdle int) *Pool {
 }
 
 // Get gets a connection from the pool.
-func (p *Pool) Get() Closer {
-	return &pooledConnection{p: p}
+func (p *Pool) Get() (*pooledConnection, error) {
+	c := &pooledConnection{p: p}
+	err := c.get()
+	return c, err
 }
 
 // Close releases the resources used by the pool.

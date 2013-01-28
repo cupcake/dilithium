@@ -11,17 +11,26 @@ type ForwardingTable struct {
 	sync.RWMutex
 }
 
-func (t *ForwardingTable) Put(e *ForwardingTableEntry) {
+func (t *ForwardingTable) Insert(e *ForwardingTableEntry) {
 	t.Lock()
-	t.Insert(e)
+	t.Tree.Insert(e)
+	t.Unlock()
+}
+
+func (t *ForwardingTable) Delete(maxKey int) {
+	t.Lock()
+	t.Tree.Delete(&ForwardingTableEntry{MaxKey: maxKey})
 	t.Unlock()
 }
 
 func (t *ForwardingTable) Lookup(key int) Shard {
 	t.RLock()
 	// TODO: optimize this?
-	e := t.Floor(&ForwardingTableEntry{MaxKey: key})
+	e := t.Ceil(&ForwardingTableEntry{MaxKey: key})
 	t.RUnlock()
+	if e == nil {
+		return nil
+	}
 	return e.(*ForwardingTableEntry).Shard
 }
 
