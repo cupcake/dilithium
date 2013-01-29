@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"cupcake.io/dilithium"
+	"git.cupcake.io/dilithium"
 	. "launchpad.net/gocheck"
 )
 
