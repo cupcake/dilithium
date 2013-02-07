@@ -26,15 +26,13 @@ func NewForwardingTableFromJSON(r io.Reader) (*ForwardingTable, error) {
 
 func NewForwardingTable(config map[string]ShardConfig) (*ForwardingTable, error) {
 	table := &ForwardingTable{}
-	shardTypesMtx.RLock()
-	defer shardTypesMtx.RUnlock()
 	for m, c := range config {
 		maxKey, err := strconv.Atoi(m)
 		if err != nil {
 			return nil, fmt.Errorf("dilithium: Invalid maxKey from JSON config, expecting integer, got '%s'", maxKey)
 		}
 
-		shard, err := NewShard(c)
+		shard, err := c.NewShard()
 		if err != nil {
 			return nil, err
 		}
@@ -43,13 +41,13 @@ func NewForwardingTable(config map[string]ShardConfig) (*ForwardingTable, error)
 	return table, nil
 }
 
-func NewShard(config ShardConfig) (shard Shard, err error) {
+func (config *ShardConfig) NewShard() (shard Shard, err error) {
 	if config.Type == "" {
 		return nil, errors.New("dilithium: Missing shard type")
 	}
 
-	shardType, ok := shardTypes[config.Type]
-	if !ok {
+	shardType := ShardTypeRegistry.Type(config.Type)
+	if shardType == nil {
 		return nil, fmt.Errorf("dilithium: Unknown shard type '%s'", config.Type)
 	}
 
@@ -60,7 +58,7 @@ func NewShard(config ShardConfig) (shard Shard, err error) {
 	}
 
 	for _, child := range config.Children {
-		childShard, err := NewShard(child)
+		childShard, err := child.NewShard()
 		if err != nil {
 			return nil, err
 		}
@@ -68,4 +66,23 @@ func NewShard(config ShardConfig) (shard Shard, err error) {
 		shard.AddChild(childShard)
 	}
 	return
+}
+
+func NewShardConfig(s Shard) (*ShardConfig, error) {
+	name := ShardTypeRegistry.Name(s)
+	if name == "" {
+		return nil, fmt.Errorf("dilithium: Unregistered shard type %T", s)
+	}
+	children := s.Children()
+	config := &ShardConfig{name, s.Config(), make([]ShardConfig, len(children))}
+
+	for i, child := range children {
+		c, err := NewShardConfig(child)
+		if err != nil {
+			return nil, err
+		}
+		config.Children[i] = *c
+	}
+
+	return config, nil
 }

@@ -34,6 +34,17 @@ func (t *ForwardingTable) Lookup(key int) Shard {
 	return e.(*ForwardingTableEntry).Shard
 }
 
+func (t *ForwardingTable) Entries() []*ForwardingTableEntry {
+	t.RLock()
+	defer t.RUnlock()
+	entries := make([]*ForwardingTableEntry, 0, t.Len())
+	t.Do(func(e llrb.Comparable) bool {
+		entries = append(entries, e.(*ForwardingTableEntry))
+		return false
+	})
+	return entries
+}
+
 type ForwardingTableEntry struct {
 	MaxKey int
 	Shard  Shard

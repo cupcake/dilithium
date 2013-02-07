@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/titanous/guid"
@@ -34,27 +32,11 @@ type Shard interface {
 	sync.Locker
 }
 
-var (
-	shardTypes    = make(map[string]reflect.Type)
-	shardTypesMtx sync.RWMutex
-)
-
 type ReplicateShard struct {
 	parent   Shard
 	children []Shard
 	id       string
 	sync.RWMutex
-}
-
-func RegisterShardType(s Shard) {
-	shardTypesMtx.Lock()
-	defer shardTypesMtx.Unlock()
-	typ := reflect.Indirect(reflect.ValueOf(s)).Type()
-	name := typ.Name()
-	if name[len(name)-5:] == "Shard" {
-		name = name[:len(name)-5]
-	}
-	shardTypes[strings.ToLower(name)] = typ
 }
 
 func (r *ReplicateShard) Parent() Shard {
