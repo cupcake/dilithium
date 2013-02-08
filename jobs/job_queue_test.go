@@ -1,4 +1,4 @@
-package dilithium
+package jobs
 
 import (
 	"testing"
