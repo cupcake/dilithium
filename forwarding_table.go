@@ -3,7 +3,7 @@ package dilithium
 import (
 	"sync"
 
-	"code.google.com/p/biogo.llrb"
+	"code.google.com/p/biogo.store/llrb"
 )
 
 type ForwardingTable struct {
